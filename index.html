@@ -257,11 +257,6 @@ body.emerald {
   <div class="actions">
     <button id="reset">↻ Новая расстановка</button>
 
-<div class="test-buttons">
-  <button id="test-mate">Тест: шах и мат</button>
-  <button id="test-draw">Тест: два короля</button>
-  <button id="test-reset">Вернуть обычную игру</button>
-</div>
 
   </div>
 </main>
@@ -536,57 +531,6 @@ position = [...initialPosition];
   drawBoard();
 });
 
-
-function loadTestPosition(fen, message) {
-  game.load(fen);
-  selected = null;
-  lastMove = null;
-
-  position = game.board().flat().map(piece => {
-    if (!piece) return "";
-
-    const symbols = {
-      wp: "♙", wn: "♘", wb: "♗", wr: "♖", wq: "♕", wk: "♔",
-      bp: "♟", bn: "♞", bb: "♝", br: "♜", bq: "♛", bk: "♚"
-    };
-
-    return symbols[piece.color + piece.type];
-  });
-
-if (game.in_checkmate()) {
-  statusElement.textContent =
-    "Игра окончена! Шах и мат. Победили " +
-    (game.turn() === "w" ? "чёрные!" : "белые!");
-} else if (game.in_draw()) {
-  statusElement.textContent = "Игра окончена! Ничья.";
-} else {
-  statusElement.textContent = message;
-}
-  drawBoard();
-}
-
-document.getElementById("test-mate").addEventListener("click", () => {
-  loadTestPosition(
-    "7k/6Q1/5K2/8/8/8/8/8 b - - 0 1",
-    "Тест: Игра окончена! Шах и мат!"
-  );
-});
-
-document.getElementById("test-draw").addEventListener("click", () => {
-  loadTestPosition(
-    "7k/8/6K1/8/8/8/8/8 w - - 0 1",
-    "Тест: Партия завершена. Ничья - на доске остались только два короля."
-  );
-});
-
-document.getElementById("test-reset").addEventListener("click", () => {
-  game.reset();
-  position = [...initialPosition];
-  selected = null;
-  lastMove = null;
-  statusElement.textContent = "Начальная расстановка восстановлена.";
-  drawBoard();
-});
 
 
 drawBoard();
