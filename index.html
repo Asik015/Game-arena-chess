@@ -1,0 +1,595 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Game Arena — Chess</title>
+<style>
+
+.black-piece {
+  color: #171717 !important;
+  text-shadow: 0 1px 1px #000;
+}
+
+.white-piece {
+  color: #fffdf5 !important;
+  text-shadow: 0 1px 2px #8a7650;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 24px 14px;
+  min-height: 100vh;
+  background: #101010;
+  color: #f5f5f5;
+  font-family: Arial, sans-serif;
+  display: flex;
+  justify-content: center;
+}
+
+.app { width: min(100%, 620px); }
+
+h1 {
+  text-align: center;
+  color: #dfbd69;
+  letter-spacing: 4px;
+  margin-bottom: 6px;
+}
+
+.subtitle {
+  text-align: center;
+  color: #aaa;
+  margin-bottom: 24px;
+}
+
+.themes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+
+button {
+  cursor: pointer;
+  padding: 10px 13px;
+  border: 1px solid #555;
+  border-radius: 8px;
+  background: #222;
+  color: white;
+}
+
+button.active {
+  border-color: #dfbd69;
+  color: #dfbd69;
+}
+
+.board {
+  display: grid;
+  position: relative;
+  grid-template-columns: repeat(8, 1fr);
+  width: 100%;
+  aspect-ratio: 1;
+  border: 3px solid #555;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.coordinates {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  width: 100%;
+  color: #dfbd69;
+  font-size: 12px;
+  text-align: center;
+  padding: 5px 0;
+  user-select: none;
+}
+
+.coordinates span {
+  display: block;
+}
+
+
+.board-wrap {
+  width: 100%;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.board-row {
+  display: flex;
+  align-items: stretch;
+}
+
+.rank-coordinates {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  width: 24px;
+  flex-shrink: 0;
+  color: #dfbd69;
+  font-size: 12px;
+  text-align: center;
+}
+
+.square {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  font-size: clamp(23px, 7vw, 44px);
+  line-height: 1;
+  user-select: none;
+}
+
+.light { background: var(--light); }
+.dark { background: var(--dark); }
+
+.square.selected {
+  box-shadow: inset 0 0 0 4px #40c878;
+}
+
+
+.square.last-move {
+  background: rgba(212, 175, 55, 0.48) !important;
+  box-shadow: inset 0 0 0 3px rgba(212, 175, 55, 0.75);
+}
+
+.square.in-check {
+  background: rgba(255, 45, 45, 0.65) !important;
+  box-shadow: inset 0 0 0 3px rgba(255, 45, 45, 0.95);
+}
+
+
+.square.possible-move::after {
+  content: "";
+  position: absolute;
+  width: 24%;
+  height: 24%;
+  border-radius: 50%;
+  background: #40c878;
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.square.possible-capture {
+  box-shadow: inset 0 0 0 4px #e05252;
+}
+
+
+.piece {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  font-family: "DejaVu Sans", "Segoe UI Symbol", "Arial Unicode MS", sans-serif;
+  filter: none;
+  -webkit-text-stroke: 0.5px currentColor;
+  will-change: transform;
+}
+
+.black-piece {
+  color: #171717 !important;
+  text-shadow: none;
+}
+
+.white-piece {
+  color: #fffdf5 !important;
+  text-shadow: 0 1px 2px #8a7650;
+}
+
+.status {
+  margin-top: 16px;
+  text-align: center;
+  color: #ddd;
+  min-height: 24px;
+}
+
+.actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+body.gold {
+  --light: #e8d7a5;
+  --dark: #76572c;
+}
+
+body.wood {
+  --light: #efd9b5;
+  --dark: #99613e;
+}
+
+body.darkmode {
+  --light: #b9bec7;
+  --dark: #454b57;
+}
+
+body.emerald {
+  --light: #e7e5d6;
+  --dark: #26765c;
+}
+
+
+
+</style>
+</head>
+<body class="gold">
+<main class="app">
+  <h1>GAME ARENA</h1>
+  <div class="subtitle">CHESS · YOUR ARENA</div>
+
+  <div class="themes">
+    <button class="active" data-theme="gold">👑 Gold</button>
+    <button data-theme="wood">🪵 Wood</button>
+    <button data-theme="darkmode">🌑 Dark</button>
+    <button data-theme="emerald">💚 Emerald</button>
+  </div>
+
+
+<div class="board-wrap">
+  <div class="coordinates">
+    <span>A</span><span>B</span><span>C</span><span>D</span>
+    <span>E</span><span>F</span><span>G</span><span>H</span>
+  </div>
+  <div class="board-row">
+    <div class="rank-coordinates">
+      <span>8</span><span>7</span><span>6</span><span>5</span>
+      <span>4</span><span>3</span><span>2</span><span>1</span>
+    </div>
+    <div id="board" class="board"></div>
+  </div>
+</div>
+
+  <div id="status" class="status">
+    Выбери фигуру, затем клетку для хода.
+  </div>
+
+  <div class="actions">
+    <button id="reset">↻ Новая расстановка</button>
+
+<div class="test-buttons">
+  <button id="test-mate">Тест: шах и мат</button>
+  <button id="test-draw">Тест: два короля</button>
+  <button id="test-reset">Вернуть обычную игру</button>
+</div>
+
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script>
+const boardElement = document.getElementById("board");
+const statusElement = document.getElementById("status");
+
+const initialPosition = [
+  "♜","♞","♝","♛","♚","♝","♞","♜",
+  "♟","♟","♟","♟","♟","♟","♟","♟",
+  "","","","","","","","",
+  "","","","","","","","",
+  "","","","","","","","",
+  "","","","","","","","",
+  "♙","♙","♙","♙","♙","♙","♙","♙",
+  "♖","♘","♗","♕","♔","♗","♘","♖"
+];
+
+let position = [...initialPosition];
+const game = new Chess();
+let selected = null;
+let lastMove = null;
+
+function drawBoard()  {
+  boardElement.innerHTML = "";
+
+  position.forEach((piece, index) => {
+    const row = Math.floor(index / 8);
+    const col = index % 8;
+
+    const square = document.createElement("button");
+    square.className = "square " +
+      ((row + col) % 2 === 0 ? "light" : "dark");
+
+    if (selected === index) square.classList.add("selected");
+
+    const boardRow = game.board()[row];
+const chessPiece = boardRow[col];
+
+if (
+  chessPiece &&
+  chessPiece.type === "k" &&
+  chessPiece.color === game.turn() &&
+  game.in_check()
+) {
+  square.classList.add("in-check");
+}
+if (lastMove && (index === lastMove.from || index === lastMove.to)) {
+  square.classList.add("last-move");
+}
+
+
+if (selected !== null) {
+  const files = "abcdefgh";
+  const from = files[selected % 8] + (8 - Math.floor(selected / 8));
+  const toSquare = files[index % 8] + (8 - row);
+
+  const moves = game.moves({ square: from, verbose: true });
+  const possibleMove = moves.find(move => move.to === toSquare);
+
+  if (possibleMove) {
+    if (possibleMove.captured) {
+      square.classList.add("possible-capture");
+    } else {
+      square.classList.add("possible-move");
+    }
+  }
+}
+
+
+if (piece) {
+  const span = document.createElement("span");
+  span.className = "piece";
+
+  if ("♜♞♝♛♚♟".includes(piece)) {
+    span.classList.add("black-piece");
+  } else {
+    span.classList.add("white-piece");
+  }
+
+  span.textContent = piece;
+  square.appendChild(span);
+}
+
+    square.setAttribute(
+      "aria-label",
+      `Клетка ${String.fromCharCode(97 + col)}${8 - row}`
+    );
+
+    square.addEventListener("click", () => handleSquare(index));
+    boardElement.appendChild(square);
+  });
+}
+
+
+
+function handleSquare(index) {
+
+  if (game.in_checkmate()) {
+    statusElement.textContent =
+      "Шах и мат! Победили " +
+      (game.turn() === "w" ? "чёрные!" : "белые!");
+    return;
+  }
+
+  if (game.in_draw()) {
+    statusElement.textContent = "Ничья! Партия окончена.";
+    return;
+  }
+
+
+  const files = "abcdefgh";
+
+  if (selected === null) {
+    const piece = game.board()[Math.floor(index / 8)][index % 8];
+
+    if (!piece) {
+      statusElement.textContent = "Сначала выбери клетку с фигурой.";
+      return;
+    }
+
+    if (
+      (game.turn() === "w" && piece.color !== "w") ||
+      (game.turn() === "b" && piece.color !== "b")
+    ) {
+      statusElement.textContent = "Сейчас ходит другая сторона.";
+      return;
+    }
+
+    selected = index;
+    statusElement.textContent = "Теперь выбери клетку назначения.";
+    drawBoard();
+    return;
+  }
+
+  const fromIndex = selected;
+  const toIndex = index;
+
+  const fromSquare =
+    files[fromIndex % 8] + (8 - Math.floor(fromIndex / 8));
+  const toSquare =
+    files[toIndex % 8] + (8 - Math.floor(toIndex / 8));
+
+  const originalPiece =
+    boardElement.children[fromIndex]?.querySelector(".piece");
+
+  const startRect = originalPiece?.getBoundingClientRect();
+  const movingSymbol = originalPiece?.textContent;
+  const movingClass = originalPiece?.className;
+
+  const move = game.move({
+    from: fromSquare,
+    to: toSquare,
+    promotion: "q"
+  });
+
+if (move) {
+  lastMove = {
+    from: fromIndex,
+    to: toIndex
+  };
+}
+
+  selected = null;
+
+  if (!move) {
+    statusElement.textContent = "Так ходить нельзя. Попробуй другой ход.";
+  } else if (game.in_checkmate()) {
+    statusElement.textContent =
+      "Мат! Победили " + (game.turn() === "w" ? "чёрные!" : "белые!");
+  } else if (game.in_check()) {
+    statusElement.textContent =
+      "Шах! Ход " + (game.turn() === "w" ? "белых." : "чёрных.");
+  } else if (game.in_draw()) {
+    statusElement.textContent = "Ничья!";
+  } else {
+    statusElement.textContent =
+      "Ход " + (game.turn() === "w" ? "белых." : "чёрных.");
+  }
+
+  position = game.board().flat().map(piece => {
+    if (!piece) return "";
+
+    const symbols = {
+      wp: "♙", wn: "♘", wb: "♗", wr: "♖", wq: "♕", wk: "♔",
+      bp: "♟", bn: "♞", bb: "♝", br: "♜", bq: "♛", bk: "♚"
+    };
+
+    return symbols[piece.color + piece.type];
+  });
+
+  drawBoard();
+
+  if (!move || !startRect || !movingSymbol) return;
+
+  const destinationSquare = boardElement.children[toIndex];
+  const destinationPiece = destinationSquare?.querySelector(".piece");
+  const endRect = destinationSquare?.getBoundingClientRect();
+
+  if (!destinationSquare || !endRect) return;
+
+  const ghost = document.createElement("span");
+  ghost.className = movingClass || "piece";
+  ghost.textContent = movingSymbol;
+
+  Object.assign(ghost.style, {
+    position: "fixed",
+    left: startRect.left + "px",
+    top: startRect.top + "px",
+    width: startRect.width + "px",
+    height: startRect.height + "px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    margin: "0",
+    zIndex: "9999",
+    pointerEvents: "none"
+  });
+
+  document.body.appendChild(ghost);
+
+  if (destinationPiece) {
+    destinationPiece.style.visibility = "hidden";
+  }
+
+  const dx =
+    endRect.left + (endRect.width - startRect.width) / 2 - startRect.left;
+  const dy =
+    endRect.top + (endRect.height - startRect.height) / 2 - startRect.top;
+
+  const animation = ghost.animate(
+    [
+      { transform: "translate(0, 0)" },
+      { transform: `translate(${dx}px, ${dy}px)` }
+    ],
+    {
+      duration: 180,
+      easing: "ease-in-out",
+      fill: "forwards"
+    }
+  );
+
+  animation.onfinish = () => {
+    ghost.remove();
+
+    if (destinationPiece) {
+      destinationPiece.style.visibility = "";
+    }
+  };
+}
+
+
+
+document.querySelectorAll("[data-theme]").forEach(button => {
+  button.addEventListener("click", () => {
+    document.body.className = button.dataset.theme;
+
+    document.querySelectorAll("[data-theme]").forEach(item => {
+      item.classList.toggle("active", item === button);
+    });
+  });
+});
+
+document.getElementById("reset").addEventListener("click", () => {
+game.reset();
+position = [...initialPosition];
+  selected = null;
+  lastMove = null;
+  statusElement.textContent = "Начальная расстановка восстановлена.";
+  drawBoard();
+});
+
+
+function loadTestPosition(fen, message) {
+  game.load(fen);
+  selected = null;
+  lastMove = null;
+
+  position = game.board().flat().map(piece => {
+    if (!piece) return "";
+
+    const symbols = {
+      wp: "♙", wn: "♘", wb: "♗", wr: "♖", wq: "♕", wk: "♔",
+      bp: "♟", bn: "♞", bb: "♝", br: "♜", bq: "♛", bk: "♚"
+    };
+
+    return symbols[piece.color + piece.type];
+  });
+
+if (game.in_checkmate()) {
+  statusElement.textContent =
+    "Игра окончена! Шах и мат. Победили " +
+    (game.turn() === "w" ? "чёрные!" : "белые!");
+} else if (game.in_draw()) {
+  statusElement.textContent = "Игра окончена! Ничья.";
+} else {
+  statusElement.textContent = message;
+}
+  drawBoard();
+}
+
+document.getElementById("test-mate").addEventListener("click", () => {
+  loadTestPosition(
+    "7k/6Q1/5K2/8/8/8/8/8 b - - 0 1",
+    "Тест: Игра окончена! Шах и мат!"
+  );
+});
+
+document.getElementById("test-draw").addEventListener("click", () => {
+  loadTestPosition(
+    "7k/8/6K1/8/8/8/8/8 w - - 0 1",
+    "Тест: Партия завершена. Ничья - на доске остались только два короля."
+  );
+});
+
+document.getElementById("test-reset").addEventListener("click", () => {
+  game.reset();
+  position = [...initialPosition];
+  selected = null;
+  lastMove = null;
+  statusElement.textContent = "Начальная расстановка восстановлена.";
+  drawBoard();
+});
+
+
+drawBoard();
+</script>
+</body>
+</html>
