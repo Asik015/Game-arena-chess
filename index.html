@@ -7,6 +7,52 @@
 <title>Game Arena — Chess</title>
 <style>
 
+.clock-settings {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 15px 0;
+  color: #dfbd69;
+}
+
+.clock-settings select {
+  background: #171717;
+  color: #dfbd69;
+  border: 1px solid #b89435;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 15px;
+}
+
+.clocks {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.clock {
+  flex: 1;
+  text-align: center;
+  padding: 12px;
+  border: 1px solid #555;
+  border-radius: 8px;
+  background: #171717;
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.clock.active {
+  border: 2px solid #dfbd69;
+  color: #dfbd69;
+  background: #292315;
+  box-shadow: 0 0 14px rgba(223, 189, 105, 0.35);
+  transform: scale(1.03);
+}
+
 .black-piece {
   color: #171717 !important;
   text-shadow: 0 1px 1px #000;
@@ -77,7 +123,6 @@ button.active {
   border-radius: 4px;
   overflow: hidden;
 }
-
 .coordinates {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
@@ -219,7 +264,71 @@ body.emerald {
   --dark: #26765c;
 }
 
+.clock-player {
+  display: block;
+  font-size: 12px !important;
+  font-weight: normal;
+  line-height: 1.3;
+}
 
+.clock-time {
+  display: block;
+  font-size: 21px !important;
+  font-weight: bold;
+  line-height: 1.3;
+}
+
+.clock.low-time {
+  color: #ff4d4d;
+  border-color: #ff4d4d;
+  background: #351515;
+  box-shadow: 0 0 14px rgba(255, 77, 77, 0.45);
+  animation: clock-warning 0.8s infinite alternate;
+}
+
+@keyframes clock-warning {
+  from {
+    box-shadow: 0 0 5px rgba(255, 77, 77, 0.2);
+  }
+  to {
+    box-shadow: 0 0 16px rgba(255, 77, 77, 0.7);
+  }
+}
+
+
+/* Сообщение о завершении партии */
+.game-result {
+  position: relative;
+  inset: auto;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 12px 0 0;
+  background: transparent;
+  pointer-events: auto;
+}
+.game-result-card {
+  width: min(100%, 360px);
+  padding: 18px 16px;
+  pointer-events: auto;
+  text-align: center;
+  color: #fff8e5;
+  background: linear-gradient(145deg, #292315, #111);
+  border: 1px solid #dfbd69;
+  border-radius: 18px;
+  box-shadow: 0 16px 55px rgba(0,0,0,.55), 0 0 24px rgba(223,189,105,.18);
+  animation: result-pop .25s ease-out;
+}
+.game-result-icon { font-size: 34px; margin-bottom: 6px; }
+.game-result-title { color: #dfbd69; font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+.game-result-text { color: #e5e0d3; margin-bottom: 12px; line-height: 1.4; }
+.game-result-card button { border-color: #dfbd69; color: #dfbd69; }
+@keyframes result-pop {
+  from { opacity: 0; transform: translateY(8px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 
 </style>
 </head>
@@ -250,9 +359,38 @@ body.emerald {
   </div>
 </div>
 
-  <div id="status" class="status">
-    Выбери фигуру, затем клетку для хода.
+<div id="status" class="status">
+  ♙ Ход белых
+</div>
+
+<div class="game-mode">
+  <label for="game-mode">Режим игры:</label>
+  <select id="game-mode">
+    <option value="computer">🤖 Против компьютера</option>
+    <option value="two-players">♟ На двоих</option>
+  </select>
+</div>
+
+<div class="clock-settings">
+  <label for="time-control">Время на партию:</label>
+  <select id="time-control">
+    <option value="60">1+0 — Пуля</option>
+    <option value="180">3+0 — Блиц</option>
+    <option value="300" selected>5+0 — Блиц</option>
+  </select>
+</div>
+
+<div class="clocks">
+  <div class="clock" id="black-clock">
+    <span class="clock-player">♟ ЧЁРНЫЕ</span>
+    <span class="clock-time">5:00</span>
   </div>
+
+  <div class="clock active" id="white-clock">
+    <span class="clock-player">♙ БЕЛЫЕ</span>
+    <span class="clock-time">5:00</span>
+  </div>
+</div>
 
   <div class="actions">
     <button id="reset">↻ Новая расстановка</button>
@@ -264,7 +402,125 @@ body.emerald {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 <script>
 const boardElement = document.getElementById("board");
+const gameMode = document.getElementById("game-mode");
+const audioContext = new (
+  window.AudioContext || window.webkitAudioContext
+)();
+
+
+const moveSound = new Audio("./sounds/Wood%20click.mp3");
+const captureSound = new Audio("./sounds/capture.mp3");
+
+moveSound.preload = "auto";
+captureSound.preload = "auto";
+
+moveSound.volume = 0.7;
+captureSound.volume = 0.8;
+
+function playSound(type = "move") {
+  const sound = type === "capture" ? captureSound : moveSound;
+
+  sound.currentTime = 0;
+
+  sound.play().catch(error => {
+    console.log("Не удалось воспроизвести звук:", error);
+  });
+}
+
 const statusElement = document.getElementById("status");
+
+const whiteClock = document.getElementById("white-clock");
+const blackClock = document.getElementById("black-clock");
+const timeControl = document.getElementById("time-control");
+
+let whiteTime = Number(timeControl.value);
+let blackTime = Number(timeControl.value);
+let clockInterval = null;
+let clockStarted = false;
+let clockGameOver = false;
+
+function formatTime(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${minutes}:${String(secs).padStart(2, "0")}`;
+}
+
+function updateClocks() {
+  whiteClock.querySelector(".clock-time").textContent =
+    formatTime(whiteTime);
+
+  blackClock.querySelector(".clock-time").textContent =
+    formatTime(blackTime);
+
+  whiteClock.classList.toggle(
+    "low-time",
+    whiteTime <= 10 && whiteTime > 0
+  );
+
+  blackClock.classList.toggle(
+    "low-time",
+    blackTime <= 10 && blackTime > 0
+  );
+
+  whiteClock.classList.toggle(
+    "active",
+    clockStarted && game.turn() === "w" && !clockGameOver
+  );
+
+  blackClock.classList.toggle(
+    "active",
+    clockStarted && game.turn() === "b" && !clockGameOver
+  );
+}
+
+function stopClocks() {
+  clearInterval(clockInterval);
+  clockInterval = null;
+  clockGameOver = true;
+  updateClocks();
+}
+
+timeControl.addEventListener("change", () => {
+  clearInterval(clockInterval);
+  clockInterval = null;
+
+  whiteTime = Number(timeControl.value);
+  blackTime = Number(timeControl.value);
+
+  clockStarted = false;
+  clockGameOver = false;
+
+  updateClocks();
+  statusElement.textContent = "♙ Ход белых.";
+});
+
+function startClocks() {
+  if (clockStarted || clockGameOver) return;
+
+  clockStarted = true;
+
+  clockInterval = setInterval(() => {
+    if (game.turn() === "w") {
+      whiteTime--;
+    } else {
+      blackTime--;
+    }
+
+    updateClocks();
+
+    if (whiteTime <= 0 || blackTime <= 0) {
+      stopClocks();
+
+      const loser = whiteTime <= 0 ? "белые" : "чёрные";
+      statusElement.textContent =
+        "⏱️ Время вышло! Проиграли " + loser + ".";
+
+      return;
+    }
+  }, 1000);
+
+  updateClocks();
+}
 
 const initialPosition = [
   "♜","♞","♝","♛","♚","♝","♞","♜",
@@ -281,6 +537,127 @@ let position = [...initialPosition];
 const game = new Chess();
 let selected = null;
 let lastMove = null;
+
+
+function showGameResult(title, message, icon = "🏆") {
+  if (document.querySelector(".game-result")) return;
+  const overlay = document.createElement("div");
+  overlay.className = "game-result";
+  overlay.innerHTML = `
+    <div class="game-result-card" role="dialog" aria-modal="true">
+      <div class="game-result-icon">${icon}</div>
+      <div class="game-result-title">${title}</div>
+      <div class="game-result-text">${message}</div>
+      <button type="button" id="result-new-game">↻ Новая партия</button>
+    </div>`;
+  const boardWrap = document.querySelector(".board-wrap");
+  if (boardWrap) {
+    if (getComputedStyle(boardWrap).position === "static") {
+      boardWrap.style.position = "relative";
+    }
+    boardWrap.appendChild(overlay);
+  } else {
+    document.body.appendChild(overlay);
+  }
+  document.getElementById("result-new-game").addEventListener("click", () => {
+    overlay.remove();
+    document.getElementById("reset").click();
+  });
+}
+
+function computerMove() {
+  if (game.game_over()) return;
+
+  const moves = game.moves();
+
+  if (moves.length === 0) return;
+
+  // Выбираем лучший из легальных ходов: мат, взятие фигуры,
+  // шах и развитие фигур получают приоритет.
+  const verboseMoves = game.moves({ verbose: true });
+  const pieceValues = { p: 10, n: 30, b: 32, r: 50, q: 90, k: 900 };
+
+  function scoreMove(move) {
+    let score = 0;
+
+    // Если ход ставит мат — это лучший ход.
+    const result = game.move({
+      from: move.from,
+      to: move.to,
+      promotion: move.promotion || "q"
+    });
+
+    if (!result) return -Infinity;
+
+    if (game.in_checkmate()) score += 100000;
+    else if (game.in_check()) score += 50;
+
+    if (move.captured) {
+      score += (pieceValues[move.captured] || 0) * 10;
+      score -= (pieceValues[move.piece] || 0);
+    }
+
+    // Небольшой бонус за продвижение пешки.
+    if (move.piece === "p" && move.to[1] === "1") score += 8;
+
+    game.undo();
+    return score;
+  }
+
+  let bestScore = -Infinity;
+  let bestMoves = [];
+
+  for (const move of verboseMoves) {
+    const score = scoreMove(move);
+    if (score > bestScore) {
+      bestScore = score;
+      bestMoves = [move];
+    } else if (score === bestScore) {
+      bestMoves.push(move);
+    }
+  }
+
+  const chosenMove = bestMoves[
+    Math.floor(Math.random() * bestMoves.length)
+  ];
+
+  game.move({
+    from: chosenMove.from,
+    to: chosenMove.to,
+    promotion: chosenMove.promotion || "q"
+  });
+
+  lastMove = null;
+  selected = null;
+
+  position = game.board().flat().map(piece => {
+    if (!piece) return "";
+
+    const symbols = {
+      wp: "♙", wn: "♘", wb: "♗", wr: "♖", wq: "♕", wk: "♔",
+      bp: "♟", bn: "♞", bb: "♝", br: "♜", bq: "♛", bk: "♚"
+    };
+
+    return symbols[piece.color + piece.type];
+  });
+
+  drawBoard();
+
+  if (game.in_checkmate()) {
+    stopClocks();
+    const winner = game.turn() === "w" ? "чёрные" : "белые";
+    statusElement.textContent = "🏆 Мат! Победили " + winner + "!";
+    showGameResult("Шах и мат!", "Победили " + winner + "!", "🏆");
+  } else if (game.in_draw()) {
+    stopClocks();
+    statusElement.textContent = "🤝 Ничья! Партия окончена.";
+    showGameResult("Ничья!", "Партия завершилась вничью.", "🤝");
+  } else if (game.in_check()) {
+    statusElement.textContent = "♟️ Шах!";
+  } else {
+    statusElement.textContent = "♙ Твой ход.";
+  }
+}
 
 function drawBoard()  {
   boardElement.innerHTML = "";
@@ -355,7 +732,10 @@ if (piece) {
 
 
 
-function handleSquare(index) {
+async function handleSquare(index) {
+  if (clockGameOver) {
+    return;
+  }
 
   if (game.in_checkmate()) {
     statusElement.textContent =
@@ -368,6 +748,7 @@ function handleSquare(index) {
     statusElement.textContent = "Ничья! Партия окончена.";
     return;
   }
+
 
 
   const files = "abcdefgh";
@@ -420,24 +801,33 @@ if (move) {
     from: fromIndex,
     to: toIndex
   };
+
+  startClocks();
+  updateClocks();
+playSound(move.captured ? "capture" : "move");
 }
 
   selected = null;
 
-  if (!move) {
-    statusElement.textContent = "Так ходить нельзя. Попробуй другой ход.";
-  } else if (game.in_checkmate()) {
-    statusElement.textContent =
-      "Мат! Победили " + (game.turn() === "w" ? "чёрные!" : "белые!");
-  } else if (game.in_check()) {
-    statusElement.textContent =
-      "Шах! Ход " + (game.turn() === "w" ? "белых." : "чёрных.");
-  } else if (game.in_draw()) {
-    statusElement.textContent = "Ничья!";
-  } else {
-    statusElement.textContent =
-      "Ход " + (game.turn() === "w" ? "белых." : "чёрных.");
-  }
+if (!move) {
+  statusElement.textContent = "Так ходить нельзя. Попробуй другой ход.";
+} else if (game.in_checkmate()) {
+  stopClocks();
+  const winner = game.turn() === "w" ? "чёрные" : "белые";
+  statusElement.textContent = "🏆 Мат! Победили " + winner + "!";
+  showGameResult("Шах и мат!", "Победили " + winner + "!", "🏆");
+} else if (game.in_draw()) {
+  stopClocks();
+  statusElement.textContent = "🤝 Ничья! Партия окончена.";
+  showGameResult("Ничья!", "Партия завершилась вничью.", "🤝");
+} else if (game.in_check()) {
+  statusElement.textContent =
+    "♟️ Шах! Ход " +
+    (game.turn() === "w" ? "белых." : "чёрных.");
+} else {
+  statusElement.textContent =
+    (game.turn() === "w" ? "♙ Ход белых." : "♟ Ход чёрных.");
+}
 
   position = game.board().flat().map(piece => {
     if (!piece) return "";
@@ -501,15 +891,29 @@ if (move) {
     }
   );
 
-  animation.onfinish = () => {
-    ghost.remove();
+animation.onfinish = () => {
+  ghost.remove();
 
-    if (destinationPiece) {
-      destinationPiece.style.visibility = "";
-    }
-  };
+  if (destinationPiece) {
+    destinationPiece.style.visibility = "";
+  }
+
+  if (
+    gameMode.value === "computer" &&
+    game.turn() === "b" &&
+    !game.game_over() &&
+    !clockGameOver
+  ) {
+    setTimeout(() => {
+      computerMove();
+
+      startClocks();
+      updateClocks();
+      playSound("move");
+    }, 500);
+  }
+};
 }
-
 
 
 document.querySelectorAll("[data-theme]").forEach(button => {
@@ -523,11 +927,23 @@ document.querySelectorAll("[data-theme]").forEach(button => {
 });
 
 document.getElementById("reset").addEventListener("click", () => {
-game.reset();
-position = [...initialPosition];
+  document.querySelector(".game-result")?.remove();
+  game.reset();
+  position = [...initialPosition];
   selected = null;
   lastMove = null;
-  statusElement.textContent = "Начальная расстановка восстановлена.";
+
+  clearInterval(clockInterval);
+  clockInterval = null;
+
+  whiteTime = Number(timeControl.value);
+  blackTime = Number(timeControl.value);
+  clockStarted = false;
+  clockGameOver = false;
+
+  updateClocks();
+
+  statusElement.textContent = "♙ Ход белых.";
   drawBoard();
 });
 
