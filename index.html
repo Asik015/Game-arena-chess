@@ -363,6 +363,17 @@ body.emerald {
   ♙ Ход белых
 </div>
 
+<div class="online-panel" style="margin:14px 0;padding:12px;border:1px solid #b89435;border-radius:10px;background:#171717;text-align:center;">
+  <div style="color:#dfbd69;font-weight:bold;margin-bottom:8px;">♟ Игра с другом онлайн</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+    <button id="create-room">Создать комнату</button>
+    <input id="room-code" placeholder="Код комнаты" maxlength="8" style="width:125px;background:#222;color:#fff;border:1px solid #555;border-radius:8px;padding:9px;">
+    <button id="join-room">Войти</button>
+    <button id="copy-room" style="display:none;">Копировать ссылку</button>
+  </div>
+  <div id="online-status" style="margin-top:8px;color:#aaa;font-size:13px;">Создай комнату и отправь другу код.</div>
+</div>
+
 <div class="game-mode">
   <label for="game-mode">Режим игры:</label>
   <select id="game-mode">
@@ -399,6 +410,9 @@ body.emerald {
   </div>
 </main>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 <script>
 const boardElement = document.getElementById("board");
@@ -535,6 +549,134 @@ const initialPosition = [
 
 let position = [...initialPosition];
 const game = new Chess();
+
+// Firebase online rooms (anonymous sign-in is required in Firebase Authentication).
+const firebaseConfig = {
+  apiKey: "AIzaSyBohNV7J1DTAzkwvL3wf5tAmoIK-K_CcW8",
+  authDomain: "game-arena-chess.firebaseapp.com",
+  databaseURL: "https://game-arena-chess-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "game-arena-chess",
+  storageBucket: "game-arena-chess.firebasestorage.app",
+  messagingSenderId: "167311039922",
+  appId: "1:167311039922:web:939a3eac32d56272a2d8ab"
+};
+let onlineEnabled = false;
+let onlineRoomId = null;
+let onlineColor = null;
+let onlineRoomRef = null;
+let onlineUid = null;
+let applyingRemoteState = false;
+const onlineStatus = document.getElementById("online-status");
+const roomCodeInput = document.getElementById("room-code");
+const createRoomButton = document.getElementById("create-room");
+const joinRoomButton = document.getElementById("join-room");
+const copyRoomButton = document.getElementById("copy-room");
+
+try {
+  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+  firebase.auth().signInAnonymously().then(userCredential => {
+    onlineUid = userCredential.user.uid;
+    onlineStatus.textContent = "Готово к онлайн-игре. Создай комнату или введи код друга.";
+  }).catch(error => {
+    console.error("Firebase sign-in:", error);
+    onlineStatus.textContent = "Нужно включить Anonymous sign-in в Firebase Authentication.";
+  });
+} catch (error) {
+  console.error("Firebase init:", error);
+  onlineStatus.textContent = "Не удалось подключиться к Firebase. Проверь настройки приложения.";
+}
+
+function makeRoomCode() {
+  return Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+function roomInviteUrl(code) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("room", code);
+  return url.toString();
+}
+function setOnlineMode(code, color, ref) {
+  onlineEnabled = true;
+  onlineRoomId = code;
+  onlineColor = color;
+  onlineRoomRef = ref;
+  gameMode.value = "two-players";
+  roomCodeInput.value = code;
+  copyRoomButton.style.display = "inline-block";
+  onlineStatus.textContent = "Комната " + code + " · ты играешь " + (color === "w" ? "белыми" : "чёрными") + ".";
+  ref.on("value", snapshot => {
+    const room = snapshot.val();
+    if (!room || !room.fen || applyingRemoteState) return;
+    if (room.players && room.players[onlineColor] !== onlineUid) {
+      onlineStatus.textContent = "Комната недоступна или игрок уже подключён.";
+      return;
+    }
+    if (game.fen() !== room.fen) {
+      applyingRemoteState = true;
+      game.load(room.fen);
+      position = game.board().flat().map(piece => {
+        if (!piece) return "";
+        const symbols = {wp:"♙",wn:"♘",wb:"♗",wr:"♖",wq:"♕",wk:"♔",bp:"♟",bn:"♞",bb:"♝",br:"♜",bq:"♛",bk:"♚"};
+        return symbols[piece.color + piece.type];
+      });
+      selected = null;
+      lastMove = null;
+      drawBoard();
+      statusElement.textContent = game.in_checkmate() ? "🏆 Шах и мат!" : (game.in_check() ? "♟️ Шах!" : (game.turn() === "w" ? "♙ Ход белых." : "♟ Ход чёрных."));
+      applyingRemoteState = false;
+    }
+    const opponent = onlineColor === "w" ? "b" : "w";
+    onlineStatus.textContent = room.players && room.players[opponent]
+      ? "Комната " + code + " · соперник подключён."
+      : "Комната " + code + " · ждём друга. Отправь ему код или ссылку.";
+  });
+}
+createRoomButton.addEventListener("click", async () => {
+  if (!onlineUid) { onlineStatus.textContent = "Подключение к Firebase ещё не готово. Подожди секунду и попробуй снова."; return; }
+  try {
+    const code = makeRoomCode();
+    const ref = firebase.database().ref("rooms/" + code);
+    const initialGame = new Chess();
+    await ref.set({ fen: initialGame.fen(), players: { w: onlineUid, b: null }, createdAt: firebase.database.ServerValue.TIMESTAMP });
+    setOnlineMode(code, "w", ref);
+  } catch (error) {
+    console.error(error);
+    onlineStatus.textContent = "Не удалось создать комнату. Проверь правила Realtime Database.";
+  }
+});
+joinRoomButton.addEventListener("click", async () => {
+  if (!onlineUid) { onlineStatus.textContent = "Подключение к Firebase ещё не готово. Подожди секунду и попробуй снова."; return; }
+  const code = roomCodeInput.value.trim().toUpperCase();
+  if (!code) { onlineStatus.textContent = "Введи код комнаты."; return; }
+  try {
+    const ref = firebase.database().ref("rooms/" + code);
+    const snap = await ref.once("value");
+    const room = snap.val();
+    if (!room) { onlineStatus.textContent = "Комната не найдена. Проверь код."; return; }
+    let color;
+    if (room.players && room.players.w === onlineUid) color = "w";
+    else if (room.players && room.players.b === onlineUid) color = "b";
+    else if (!room.players || !room.players.b) {
+      color = "b";
+      await ref.child("players/b").set(onlineUid);
+    } else { onlineStatus.textContent = "В комнате уже два игрока."; return; }
+    setOnlineMode(code, color, ref);
+  } catch (error) {
+    console.error(error);
+    onlineStatus.textContent = "Не удалось войти. Проверь правила Realtime Database.";
+  }
+});
+copyRoomButton.addEventListener("click", async () => {
+  if (!onlineRoomId) return;
+  try {
+    await navigator.clipboard.writeText(roomInviteUrl(onlineRoomId));
+    onlineStatus.textContent = "Ссылка на комнату скопирована. Отправь её другу.";
+  } catch (_) {
+    onlineStatus.textContent = "Код комнаты: " + onlineRoomId + ". Отправь его другу.";
+  }
+});
+const requestedRoom = new URLSearchParams(window.location.search).get("room");
+if (requestedRoom) roomCodeInput.value = requestedRoom.toUpperCase();
+
 let selected = null;
 let lastMove = null;
 
@@ -733,6 +875,10 @@ if (piece) {
 
 
 async function handleSquare(index) {
+  if (onlineEnabled && onlineColor !== game.turn()) {
+    statusElement.textContent = "Сейчас ход соперника.";
+    return;
+  }
   if (clockGameOver) {
     return;
   }
@@ -801,6 +947,13 @@ if (move) {
     from: fromIndex,
     to: toIndex
   };
+  if (onlineEnabled && onlineRoomRef && !applyingRemoteState) {
+    onlineRoomRef.update({ fen: game.fen(), lastMove: { from: fromSquare, to: toSquare }, updatedAt: firebase.database.ServerValue.TIMESTAMP })
+      .catch(error => {
+        console.error("Не удалось сохранить ход:", error);
+        onlineStatus.textContent = "Ход не синхронизирован. Проверь правила базы.";
+      });
+  }
 
   startClocks();
   updateClocks();
@@ -899,6 +1052,7 @@ animation.onfinish = () => {
   }
 
   if (
+    !onlineEnabled &&
     gameMode.value === "computer" &&
     game.turn() === "b" &&
     !game.game_over() &&
